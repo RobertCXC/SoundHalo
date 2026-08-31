@@ -1,0 +1,26 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio / IDE state
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# NuGet packages and local tooling caches
+packages/
+*.nupkg
+*.snupkg
+
+# ReSharper / coverage / profiling artifacts
+_ReSharper*/
+*.DotSettings.user
+coverage/
+TestResults/
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,161 @@
+<Window x:Class="BluetoothPopup.Popup.BluetoothPopupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Width="350"
+        Height="80"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Topmost="True"
+        Focusable="False"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        WindowStartupLocation="Manual">
+    <Window.Resources>
+        <LinearGradientBrush x:Key="GlassSurfaceBrush"
+                             StartPoint="0,0"
+                             EndPoint="1,1">
+            <GradientStop Color="#D94C7184" Offset="0" />
+            <GradientStop Color="#C83C6075" Offset="0.52" />
+            <GradientStop Color="#D95C8192" Offset="1" />
+        </LinearGradientBrush>
+
+        <DropShadowEffect x:Key="PopupShadow"
+                          BlurRadius="14"
+                          Direction="270"
+                          ShadowDepth="4"
+                          Opacity="0.32"
+                          Color="#000000" />
+
+        <DropShadowEffect x:Key="StatusGlow"
+                          BlurRadius="10"
+                          ShadowDepth="0"
+                          Opacity="0.72"
+                          Color="#61D995" />
+    </Window.Resources>
+
+    <Grid>
+        <!-- The first frame is a real ellipse, not a rounded rectangle. -->
+        <Ellipse x:Name="CircleSurface"
+                 Width="48"
+                 Height="48"
+                 HorizontalAlignment="Center"
+                 VerticalAlignment="Center"
+                 Fill="{StaticResource GlassSurfaceBrush}"
+                 Stroke="#4AFFFFFF"
+                 StrokeThickness="1"
+                 Effect="{StaticResource PopupShadow}" />
+
+        <TextBlock x:Name="CircleIcon"
+                   Text="🎧"
+                   FontFamily="Segoe UI Emoji"
+                   FontSize="22"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   Foreground="#F7FFFFFF"
+                   TextAlignment="Center"
+                   IsHitTestVisible="False" />
+
+        <!-- This layer only becomes visible once the window starts expanding. -->
+        <Border x:Name="PopupSurface"
+                Width="48"
+                Height="48"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Background="{StaticResource GlassSurfaceBrush}"
+                BorderBrush="#70DDF5FF"
+                BorderThickness="1"
+                CornerRadius="24"
+                Opacity="0"
+                Effect="{StaticResource PopupShadow}"
+                SnapsToDevicePixels="True"
+                RenderTransformOrigin="0.5,0.5">
+            <Border.RenderTransform>
+                <TranslateTransform />
+            </Border.RenderTransform>
+
+            <Grid>
+                <Border Margin="1"
+                        BorderBrush="#18FFFFFF"
+                        BorderThickness="1"
+                        CornerRadius="23"
+                        IsHitTestVisible="False" />
+
+                <Rectangle Height="1"
+                           Margin="24,1,24,0"
+                           HorizontalAlignment="Stretch"
+                           VerticalAlignment="Top"
+                           Fill="#32FFFFFF"
+                           IsHitTestVisible="False" />
+
+                <Grid x:Name="DetailsPanel"
+                      Margin="18,0,18,0"
+                      Opacity="0"
+                      VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="44" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="18" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Width="38"
+                            Height="38"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Center"
+                            Background="#3A6E9AA8"
+                            BorderBrush="#4ADDF5FF"
+                            BorderThickness="1"
+                            CornerRadius="19">
+                        <Grid>
+                            <Ellipse Width="28"
+                                     Height="28"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center"
+                                     Fill="#30517D8C" />
+                            <TextBlock Text="🎧"
+                                       FontFamily="Segoe UI Emoji"
+                                       FontSize="17"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Foreground="White"
+                                       TextAlignment="Center" />
+                        </Grid>
+                    </Border>
+
+                    <StackPanel Grid.Column="1"
+                                Margin="7,0,0,0"
+                                VerticalAlignment="Center">
+                        <TextBlock x:Name="DeviceNameText"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"
+                                   Foreground="#FFF8FAFC"
+                                   TextTrimming="CharacterEllipsis" />
+                        <StackPanel Orientation="Horizontal"
+                                    Margin="0,4,0,0">
+                            <Ellipse Width="7"
+                                     Height="7"
+                                     Margin="0,0,6,0"
+                                     VerticalAlignment="Center"
+                                     Fill="#61D995"
+                                     Effect="{StaticResource StatusGlow}" />
+                            <TextBlock Text="已连接"
+                                       FontSize="12"
+                                       Foreground="#D3E5EC" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Ellipse Grid.Column="2"
+                             Width="9"
+                             Height="9"
+                             HorizontalAlignment="Right"
+                             VerticalAlignment="Center"
+                             Fill="#61D995"
+                             Effect="{StaticResource StatusGlow}" />
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
