@@ -1,48 +1,63 @@
-# 声环 · SoundHalo
+# AirPods Popup · 声环
 
-> 给 Windows 的蓝牙音频连接，一点更有质感的回应。
+一个轻量、常驻系统托盘的 Windows 蓝牙音频连接提示工具。
 
-声环是一款轻量、安静、常驻托盘的 Windows 蓝牙音频连接提示工具。
+当 AirPods 或其他蓝牙音频设备连接成功后，屏幕顶部会先出现一个耳机圆标，再展开为设备信息卡片，显示设备名称和连接状态。提示结束后自动淡出，不打开主窗口，也不会抢走当前应用的焦点。
 
-当耳机或其他蓝牙音频设备接入时，屏幕顶部会出现一个蓝灰色玻璃质感的正圆提示，随后自然展开为设备信息卡片；连接完成，提示淡出，不打断当前工作流。
+## 效果预览
 
-它不抢焦点，不弹主窗口，也不试图变成一套复杂的设备管理中心——只在该出现的时候，给你一个漂亮而明确的反馈。
+<p align="center">
+  <img src="./picture/1.png" alt="AirPods Popup 效果图" width="600">
+</p>
 
-## 体验关键词
+## 功能特点
+
+- 顶部居中显示蓝牙音频设备连接提示。
+- 圆形提示平滑展开为蓝灰色玻璃质感的信息卡片。
+- 显示设备名称和“已连接”状态。
+- 使用透明宿主窗口，不激活窗口、不抢键盘焦点。
+- 常驻系统托盘，不创建传统主窗口。
+- 支持从托盘菜单或双击托盘图标测试弹窗动画。
+- 自动取消上一次提示，避免多个弹窗重叠。
+- 兼容常见的蓝牙耳机和蓝牙音频输出设备。
+
+## 动画流程
 
 ```text
-        ●  →  ━━━━━━━━━━━━━━━━━
-     正圆出现       信息展开       柔和退场
+圆形入场 → 短暂停留 → 展开信息卡片 → 显示设备信息 → 保持显示 → 淡出离场
+  250 ms      120 ms           350 ms              2.2 s          450 ms
 ```
 
-- 48×48 正圆入场，不拉伸成椭圆
-- 蓝灰 / 青色半透明玻璃渐变，拒绝沉闷纯黑
-- 圆形提示与信息卡片自然交接
-- 固定透明宿主窗口，动画更稳定、更少掉帧
-- 不激活窗口，不抢键盘焦点
-- 常驻系统托盘，双击即可测试弹窗
-- 支持常见蓝牙耳机与蓝牙音频输出设备
+弹窗尺寸从 `48 × 48` 的圆形提示展开为 `350 × 80` 的信息卡片，圆角、透明度、位置和内容均使用 WPF 动画完成。
 
-## 视觉方向
+## 工作方式
 
-声环的视觉语言很简单：
+程序每秒检查一次 Windows 当前处于活动状态的音频输出端点，并通过设备标识、枚举器信息和设备名称判断其是否为蓝牙音频设备。首次启动只建立设备快照；之后只对新出现的设备显示提示，避免程序启动时重复弹窗。
 
-**冷静的蓝灰色、轻薄的透明度、克制的高光，以及一个像声音回环一样的正圆。**
+目前会重点识别包含以下常见标识的设备：
 
-弹窗使用 WPF 原生半透明渐变和轻量阴影完成，圆外保持透明；动画由固定透明宿主承载，避免频繁调整系统窗口本身造成的卡顿。
+`AirPods`、`Beats`、`Bose`、`FreeBuds`、`Galaxy Buds`、`Jabra`、`LinkBuds`、`Soundcore`、`WH-`、`WF-`、`蓝牙`、`Bluetooth`
 
 ## 技术栈
 
-- C# + .NET 8
-- WPF：弹窗视觉、布局与动画
+- C# / .NET 8
+- WPF：弹窗布局、渐变视觉和动画
 - Windows Forms `NotifyIcon`：系统托盘入口
-- Windows Core Audio / MMDevice API：枚举活动音频输出端点
-- x64 / Per-Monitor DPI
-- `WS_EX_NOACTIVATE` + `WS_EX_TOOLWINDOW`：后台提示，不干扰当前应用
+- Windows Core Audio / MMDevice COM API：枚举活动音频输出设备
+- x64，支持 Per-Monitor DPI
+- Win32 `WS_EX_NOACTIVATE`、`WS_EX_TOOLWINDOW`：实现不抢焦点的后台提示
 
-## 快速开始
+## 运行要求
 
-### 构建 Debug
+- Windows 10 版本 1809（`10.0.17763`）或更高版本
+- x64 系统
+- .NET 8 Windows Desktop Runtime
+
+## 构建与运行
+
+本项目固定使用 .NET SDK `10.0.302` 的 MSBuild。请先确认对应文件存在，再执行构建。
+
+### 准备构建环境
 
 ```powershell
 $msbuildPath = 'C:\Program Files\dotnet\sdk\10.0.302\MSBuild.exe'
@@ -50,70 +65,78 @@ if (-not (Test-Path -LiteralPath $msbuildPath)) {
     throw 'Required .NET SDK 10.0.302 MSBuild.exe was not found.'
 }
 
+$restoreConfig = Join-Path (Get-Location) 'NuGet.Config'
+```
+
+### 构建 Debug
+
+```powershell
 & $msbuildPath .\AirPodsPopup.slnx `
     /t:Build `
     /p:Configuration=Debug `
     /p:Platform=x64 `
-    /p:RestoreConfigFile=D:\Airpods\NuGet.Config `
+    /p:RestoreConfigFile=$restoreConfig `
     /v:minimal
 ```
 
-### 运行
+### 运行 Debug
 
 ```powershell
 & '.\bin\x64\Debug\net8.0-windows10.0.17763.0\BluetoothPopup.exe'
 ```
 
-也可以构建 Release：
+### 构建 Release
 
 ```powershell
 & $msbuildPath .\AirPodsPopup.slnx `
     /t:Build `
     /p:Configuration=Release `
     /p:Platform=x64 `
-    /p:RestoreConfigFile=D:\Airpods\NuGet.Config `
+    /p:RestoreConfigFile=$restoreConfig `
     /v:minimal
 ```
 
-## 怎么用
+## 使用方式
 
-程序启动后不会打开主窗口，只会出现在系统托盘：
-
-1. 双击托盘图标，立即预览弹窗动画。
-2. 右键托盘图标，选择“测试弹窗”或“退出”。
-3. 连接新的蓝牙音频设备，声环会自动显示设备名称和连接状态。
+1. 启动程序后，应用会隐藏在系统托盘中。
+2. 双击托盘图标，或在右键菜单中选择“测试弹窗”，预览提示动画。
+3. 连接新的蓝牙音频设备，程序会自动显示设备名称和连接状态。
+4. 在托盘右键菜单中选择“退出”关闭程序。
 
 ## 项目结构
 
 ```text
-SoundHalo/
-├─ App.xaml / App.xaml.cs                 应用生命周期与服务编排
+AirPodsPopup/
+├─ App.xaml / App.xaml.cs                 应用生命周期和服务编排
 ├─ Bluetooth/
-│  └─ BluetoothAudioMonitor.cs             蓝牙音频设备检测
+│  └─ BluetoothAudioMonitor.cs             蓝牙音频设备轮询与识别
 ├─ Popup/
-│  ├─ BluetoothPopupWindow.xaml            玻璃弹窗视觉
-│  ├─ BluetoothPopupWindow.xaml.cs         动画时间线与状态
+│  ├─ BluetoothPopupWindow.xaml            弹窗布局和视觉效果
+│  ├─ BluetoothPopupWindow.xaml.cs         弹窗状态与动画时间线
 │  ├─ CornerRadiusAnimation.cs             圆角补间动画
-│  └─ PopupService.cs                      弹窗生命周期管理
+│  └─ PopupService.cs                      弹窗创建、取消和生命周期管理
 ├─ Tray/
-│  └─ TrayService.cs                       系统托盘菜单
+│  └─ TrayService.cs                       系统托盘图标和右键菜单
 ├─ Native/
-│  └─ NativeMethods.cs                     非激活窗口样式
+│  └─ NativeMethods.cs                     Win32 窗口样式封装
+├─ picture/
+│  └─ 1.png                                效果预览图
 ├─ AirPodsPopup.csproj
 └─ AirPodsPopup.slnx
 ```
 
-## 设计原则
+## 当前限制
+
+- 只监控 Windows 音频输出端点；普通蓝牙键盘、鼠标等设备不会触发提示。
+- 设备检测采用 1 秒轮询，因此提示可能会有轻微延迟。
+- 当前使用通用耳机图标，不读取 AirPods 电量、左右耳状态等额外信息。
+- 设备是否被识别为蓝牙音频设备，取决于 Windows 暴露的设备标识或名称。
+
+## 设计目标
 
 ```text
-轻       不引入大型 UI 框架
-静       不抢焦点，不打断操作
-准       只在检测到新连接时提醒
-美       小尺寸，也要有完整的动效和层次
+轻   不引入大型 UI 框架
+静   不抢焦点，不打断当前操作
+准   只提示新连接的蓝牙音频设备
+美   小尺寸也保留完整的动效和层次
 ```
-
-## 状态
-
-这是一个专注于 Windows 蓝牙音频连接反馈的小工具。功能保持克制，体验持续打磨中。
-
-如果你也喜欢这种“少一点打扰，多一点质感”的系统小组件，欢迎一起把声环做得更漂亮。
