@@ -19,6 +19,10 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)]
     internal static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool DestroyIcon(IntPtr hIcon);
+
     internal static void AddPopupWindowStyles(IntPtr handle)
     {
         var currentStyle = GetWindowLongPtr(handle, GwlExStyle).ToInt64();
