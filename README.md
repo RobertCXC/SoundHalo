@@ -32,7 +32,7 @@
 
 ## 工作方式
 
-程序每秒检查一次 Windows 当前处于活动状态的音频输出端点，并通过设备标识、枚举器信息和设备名称判断其是否为蓝牙音频设备。首次启动只建立设备快照；之后只对新出现的设备显示提示，避免程序启动时重复弹窗。
+程序启动时会建立一次 Windows 当前处于活动状态的音频输出端点快照，并注册 Windows Core Audio 的设备端点通知回调。端点新增、移除、状态或属性发生变化时，程序会在短暂防抖后重新枚举设备，通过设备标识、枚举器信息和设备名称判断其是否为蓝牙音频设备。首次启动只建立设备快照；之后只对新出现的设备显示提示，避免程序启动时重复弹窗。
 
 目前会重点识别包含以下常见标识的设备：
 
@@ -43,7 +43,7 @@
 - C# / .NET 8
 - WPF：弹窗布局、渐变视觉和动画
 - Windows Forms `NotifyIcon`：系统托盘入口
-- Windows Core Audio / MMDevice COM API：枚举活动音频输出设备
+- Windows Core Audio / MMDevice COM API：监听并枚举活动音频输出设备
 - x64，支持 Per-Monitor DPI
 - Win32 `WS_EX_NOACTIVATE`、`WS_EX_TOOLWINDOW`：实现不抢焦点的后台提示
 
@@ -109,7 +109,7 @@ $restoreConfig = Join-Path (Get-Location) 'NuGet.Config'
 AirPodsPopup/
 ├─ App.xaml / App.xaml.cs                 应用生命周期和服务编排
 ├─ Bluetooth/
-│  └─ BluetoothAudioMonitor.cs             蓝牙音频设备轮询与识别
+│  └─ BluetoothAudioMonitor.cs             蓝牙音频设备事件监听与识别
 ├─ Popup/
 │  ├─ BluetoothPopupWindow.xaml            弹窗布局和视觉效果
 │  ├─ BluetoothPopupWindow.xaml.cs         弹窗状态与动画时间线
@@ -128,7 +128,7 @@ AirPodsPopup/
 ## 当前限制
 
 - 只监控 Windows 音频输出端点；普通蓝牙键盘、鼠标等设备不会触发提示。
-- 设备检测采用 1 秒轮询，因此提示可能会有轻微延迟。
+- 设备检测采用 Windows 音频端点事件通知；收到通知后会进行一次短暂防抖刷新，不使用固定周期轮询。
 - 当前使用通用耳机图标，不读取 AirPods 电量、左右耳状态等额外信息。
 - 设备是否被识别为蓝牙音频设备，取决于 Windows 暴露的设备标识或名称。
 

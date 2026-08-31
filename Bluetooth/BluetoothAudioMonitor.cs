@@ -18,10 +18,10 @@ public sealed class BluetoothAudioDeviceConnectedEventArgs : EventArgs
 }
 
 /// <summary>
-/// Watches active Windows audio render endpoints and reports newly connected
-/// Bluetooth endpoints. The timer is deliberately lightweight and also works
-/// on machines where the WinRT Bluetooth watcher does not report audio profile
-/// changes consistently.
+/// Watches active Windows audio render endpoints through the Windows Core Audio
+/// notification callback and reports newly connected Bluetooth endpoints.
+/// A short one-shot timer is used only to debounce the burst of notifications
+/// that Windows can emit while an audio endpoint is being initialized.
 /// </summary>
 public sealed class BluetoothAudioMonitor : IDisposable
 {
@@ -50,12 +50,19 @@ public sealed class BluetoothAudioMonitor : IDisposable
         "Bluetooth"
     ];
 
+    private static readonly TimeSpan NotificationDebounce = TimeSpan.FromMilliseconds(200);
+
     private readonly object _syncRoot = new();
-    private ThreadingTimer? _pollTimer;
+    private IMMDeviceEnumerator? _deviceEnumerator;
+    private EndpointNotificationClient? _notificationClient;
+    private ThreadingTimer? _refreshTimer;
     private HashSet<string> _knownConnectedDevices = new(StringComparer.OrdinalIgnoreCase);
     private bool _hasInitialSnapshot;
+    private bool _isStarted;
+    private bool _notificationRegistered;
     private bool _disposed;
-    private int _isPolling;
+    private int _isRefreshing;
+    private int _refreshRequested;
 
     public event EventHandler<BluetoothAudioDeviceConnectedEventArgs>? DeviceConnected;
 
@@ -65,11 +72,21 @@ public sealed class BluetoothAudioMonitor : IDisposable
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
-            if (_pollTimer is not null)
+            if (_isStarted)
             {
                 return;
             }
 
+            _isStarted = true;
+            _refreshTimer = new ThreadingTimer(
+                RefreshTimerCallback,
+                state: null,
+                dueTime: Timeout.InfiniteTimeSpan,
+                period: Timeout.InfiniteTimeSpan);
+        }
+
+        try
+        {
             try
             {
                 RefreshSnapshot(reportNewDevices: false);
@@ -79,23 +96,112 @@ public sealed class BluetoothAudioMonitor : IDisposable
                 Debug.WriteLine($"Initial Bluetooth audio scan failed: {exception.Message}");
             }
 
-            _pollTimer = new ThreadingTimer(
-                PollTimerCallback,
-                state: null,
-                dueTime: TimeSpan.FromSeconds(1),
-                period: TimeSpan.FromSeconds(1));
+            IMMDeviceEnumerator? enumerator = null;
+            EndpointNotificationClient? notificationClient = null;
+            var notificationRegistered = false;
+
+            try
+            {
+                enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
+                notificationClient = new EndpointNotificationClient(RequestRefresh);
+
+                var result = enumerator.RegisterEndpointNotificationCallback(notificationClient);
+                ThrowIfFailed(result, "RegisterEndpointNotificationCallback");
+                notificationRegistered = true;
+
+                lock (_syncRoot)
+                {
+                    if (_disposed || !_isStarted)
+                    {
+                        // Stop may have raced with registration. Clean up this
+                        // local registration instead of handing it to the monitor.
+                    }
+                    else
+                    {
+                        _deviceEnumerator = enumerator;
+                        _notificationClient = notificationClient;
+                        _notificationRegistered = true;
+                        enumerator = null;
+                        notificationClient = null;
+                    }
+                }
+            }
+            finally
+            {
+                if (enumerator is not null)
+                {
+                    if (notificationRegistered && notificationClient is not null)
+                    {
+                        try
+                        {
+                            _ = enumerator.UnregisterEndpointNotificationCallback(notificationClient);
+                        }
+                        catch (Exception exception) when (exception is COMException or InvalidOperationException)
+                        {
+                            Debug.WriteLine($"Core Audio endpoint notification cleanup failed: {exception.Message}");
+                        }
+                    }
+
+                    ReleaseComObject(enumerator);
+                }
+            }
+        }
+        catch (Exception exception) when (exception is COMException or UnauthorizedAccessException or InvalidOperationException or InvalidCastException)
+        {
+            Debug.WriteLine($"Core Audio endpoint notification registration failed: {exception.Message}");
+            Stop();
         }
     }
 
     public void Stop()
     {
+        IMMDeviceEnumerator? enumerator;
+        EndpointNotificationClient? notificationClient;
+        ThreadingTimer? refreshTimer;
+        bool notificationRegistered;
+
         lock (_syncRoot)
         {
-            _pollTimer?.Dispose();
-            _pollTimer = null;
+            if (!_isStarted && _refreshTimer is null && _deviceEnumerator is null)
+            {
+                return;
+            }
+
+            _isStarted = false;
+            Interlocked.Exchange(ref _refreshRequested, 0);
+
+            refreshTimer = _refreshTimer;
+            _refreshTimer = null;
+
+            enumerator = _deviceEnumerator;
+            _deviceEnumerator = null;
+
+            notificationClient = _notificationClient;
+            _notificationClient = null;
+
+            notificationRegistered = _notificationRegistered;
+            _notificationRegistered = false;
+
             _knownConnectedDevices.Clear();
             _hasInitialSnapshot = false;
         }
+
+        refreshTimer?.Dispose();
+
+        if (notificationRegistered && enumerator is not null && notificationClient is not null)
+        {
+            try
+            {
+                var result = enumerator.UnregisterEndpointNotificationCallback(notificationClient);
+                ThrowIfFailed(result, "UnregisterEndpointNotificationCallback");
+            }
+            catch (Exception exception) when (exception is COMException or InvalidOperationException)
+            {
+                Debug.WriteLine($"Core Audio endpoint notification unregistration failed: {exception.Message}");
+            }
+        }
+
+        ReleaseComObject(enumerator);
     }
 
     public void Dispose()
@@ -108,30 +214,75 @@ public sealed class BluetoothAudioMonitor : IDisposable
             }
 
             _disposed = true;
-            _pollTimer?.Dispose();
-            _pollTimer = null;
-            _knownConnectedDevices.Clear();
+        }
+
+        Stop();
+    }
+
+    private void RequestRefresh()
+    {
+        if (Volatile.Read(ref _disposed) || !Volatile.Read(ref _isStarted))
+        {
+            return;
+        }
+
+        // IMMNotificationClient callbacks must remain nonblocking. Defer the
+        // timer update so the callback never waits for the monitor lock.
+        _ = ThreadPool.QueueUserWorkItem(
+            static monitor => ((BluetoothAudioMonitor)monitor!).ScheduleRefresh(),
+            this);
+    }
+
+    private void ScheduleRefresh()
+    {
+        lock (_syncRoot)
+        {
+            if (_disposed || !_isStarted || _refreshTimer is null)
+            {
+                return;
+            }
+
+            Volatile.Write(ref _refreshRequested, 1);
+            _refreshTimer.Change(NotificationDebounce, Timeout.InfiniteTimeSpan);
         }
     }
 
-    private void PollTimerCallback(object? state)
+    private void RefreshTimerCallback(object? state)
     {
-        if (_disposed || Interlocked.Exchange(ref _isPolling, 1) != 0)
+        if (Interlocked.Exchange(ref _isRefreshing, 1) != 0)
         {
             return;
         }
 
         try
         {
+            lock (_syncRoot)
+            {
+                if (_disposed || !_isStarted)
+                {
+                    return;
+                }
+
+                Interlocked.Exchange(ref _refreshRequested, 0);
+            }
+
             RefreshSnapshot(reportNewDevices: true);
         }
-        catch (Exception exception) when (exception is COMException or UnauthorizedAccessException)
+        catch (Exception exception)
         {
             Debug.WriteLine($"Bluetooth audio scan failed: {exception.Message}");
         }
         finally
         {
-            Volatile.Write(ref _isPolling, 0);
+            Volatile.Write(ref _isRefreshing, 0);
+
+            lock (_syncRoot)
+            {
+                if (!_disposed && _isStarted && Volatile.Read(ref _refreshRequested) != 0)
+                {
+                    _refreshTimer?.Change(NotificationDebounce, Timeout.InfiniteTimeSpan);
+                }
+            }
         }
     }
 
@@ -142,7 +293,7 @@ public sealed class BluetoothAudioMonitor : IDisposable
 
         lock (_syncRoot)
         {
-            if (_disposed)
+            if (_disposed || !_isStarted)
             {
                 return;
             }
@@ -307,6 +458,13 @@ public sealed class BluetoothAudioMonitor : IDisposable
         All
     }
 
+    private enum DeviceRole
+    {
+        Console,
+        Multimedia,
+        Communications
+    }
+
     [Flags]
     private enum DeviceState
     {
@@ -379,10 +537,40 @@ public sealed class BluetoothAudioMonitor : IDisposable
         int GetDevice([MarshalAs(UnmanagedType.LPWStr)] string deviceId, out IMMDevice device);
 
         [PreserveSig]
-        int RegisterEndpointNotificationCallback(IntPtr client);
+        int RegisterEndpointNotificationCallback(
+            [MarshalAs(UnmanagedType.Interface)] IMMNotificationClient client);
 
         [PreserveSig]
-        int UnregisterEndpointNotificationCallback(IntPtr client);
+        int UnregisterEndpointNotificationCallback(
+            [MarshalAs(UnmanagedType.Interface)] IMMNotificationClient client);
+    }
+
+    [ComVisible(true)]
+    [Guid("7991EEC9-7E89-4D85-8390-6C703CEC60C0")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IMMNotificationClient
+    {
+        [PreserveSig]
+        int OnDeviceStateChanged(
+            [MarshalAs(UnmanagedType.LPWStr)] string? deviceId,
+            DeviceState newState);
+
+        [PreserveSig]
+        int OnDeviceAdded([MarshalAs(UnmanagedType.LPWStr)] string deviceId);
+
+        [PreserveSig]
+        int OnDeviceRemoved([MarshalAs(UnmanagedType.LPWStr)] string deviceId);
+
+        [PreserveSig]
+        int OnDefaultDeviceChanged(
+            DataFlow flow,
+            DeviceRole role,
+            [MarshalAs(UnmanagedType.LPWStr)] string? defaultDeviceId);
+
+        [PreserveSig]
+        int OnPropertyValueChanged(
+            [MarshalAs(UnmanagedType.LPWStr)] string deviceId,
+            ref PropertyKey key);
     }
 
     [ComImport]
@@ -434,5 +622,56 @@ public sealed class BluetoothAudioMonitor : IDisposable
 
         [PreserveSig]
         int Commit();
+    }
+
+    [ComVisible(true)]
+    [ClassInterface(ClassInterfaceType.None)]
+    private sealed class EndpointNotificationClient : IMMNotificationClient
+    {
+        private readonly Action _requestRefresh;
+
+        public EndpointNotificationClient(Action requestRefresh)
+        {
+            _requestRefresh = requestRefresh;
+        }
+
+        public int OnDeviceStateChanged(string? deviceId, DeviceState newState)
+        {
+            return Notify();
+        }
+
+        public int OnDeviceAdded(string deviceId)
+        {
+            return Notify();
+        }
+
+        public int OnDeviceRemoved(string deviceId)
+        {
+            return Notify();
+        }
+
+        public int OnDefaultDeviceChanged(DataFlow flow, DeviceRole role, string? defaultDeviceId)
+        {
+            return Notify();
+        }
+
+        public int OnPropertyValueChanged(string deviceId, ref PropertyKey key)
+        {
+            return Notify();
+        }
+
+        private int Notify()
+        {
+            try
+            {
+                _requestRefresh();
+            }
+            catch (Exception exception)
+            {
+                Debug.WriteLine($"Core Audio notification handling failed: {exception.Message}");
+            }
+
+            return 0;
+        }
     }
 }
