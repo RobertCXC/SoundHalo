@@ -49,9 +49,13 @@
 
 ## 运行要求
 
-- Windows 10 版本 1809（`10.0.17763`）或更高版本
+- Windows 11，或 Windows 10 版本 1809（`10.0.17763`）及更高版本
 - x64 系统
-- .NET 8 Windows Desktop Runtime
+- .NET 8 Desktop Runtime（x64，任一 `8.0.x` 补丁版本均可）
+
+本项目以框架依赖、单文件方式发布：用户无需安装 .NET SDK、Visual Studio 或 Windows SDK；只需安装 **.NET 8 Desktop Runtime x64**。不能只安装普通的 `.NET Runtime`，因为本程序使用 WPF 和 Windows Forms。
+
+官方下载：[.NET 8 下载页](https://dotnet.microsoft.com/download/dotnet/8.0)（选择 **Desktop Runtime → Windows → x64**）。已经安装 .NET 8 Desktop Runtime x64 的用户可直接运行程序。
 
 ## 构建与运行
 
@@ -82,7 +86,7 @@ $restoreConfig = Join-Path (Get-Location) 'NuGet.Config'
 ### 运行 Debug
 
 ```powershell
-& '.\bin\x64\Debug\net8.0-windows10.0.17763.0\BluetoothPopup.exe'
+& '.\bin\x64\Debug\net8.0-windows\BluetoothPopup.exe'
 ```
 
 ### 构建 Release
@@ -95,6 +99,31 @@ $restoreConfig = Join-Path (Get-Location) 'NuGet.Config'
     /p:RestoreConfigFile=$restoreConfig `
     /v:minimal
 ```
+
+## 发布
+
+发布产物为 x64、框架依赖的单文件 EXE。先按 `win-x64` 还原，再使用发布配置生成：
+
+```powershell
+& $msbuildPath .\AirPodsPopup.csproj `
+    /t:Restore `
+    /p:Configuration=Release `
+    /p:Platform=x64 `
+    /p:RuntimeIdentifier=win-x64 `
+    /p:RestoreConfigFile=$restoreConfig `
+    /v:minimal
+
+& $msbuildPath .\AirPodsPopup.csproj `
+    /t:Publish `
+    /p:Configuration=Release `
+    /p:Platform=x64 `
+    /p:PublishProfile=FolderProfile `
+    /v:minimal
+```
+
+发布目录：`bin\x64\Release\net8.0-windows\publish\win-x64\`
+
+需要分发的是 `BluetoothPopup.exe`。当前发布体积约为 0.18 MB；同目录中的 `BluetoothPopup.pdb` 仅供调试，可不随正式版分发。
 
 ## 使用方式
 
