@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"   # 例如 v1.0.0
+      - "V*"   # 例如 V1.0.0
   workflow_dispatch:
 
 permissions:
@@ -23,12 +24,12 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Restore
-        run: dotnet restore
+        run: dotnet restore AirPodsPopup.csproj
 
       - name: Publish (single-file exe)
         run: >
           dotnet publish
-          SoundHalo.csproj
+          AirPodsPopup.csproj
           -c Release
           -f net8.0-windows
           -r win-x64
@@ -39,12 +40,11 @@ jobs:
           /p:DebugSymbols=false
           -o publish
 
-      - name: Rename exe for release asset
+      - name: Prepare release exe
         shell: pwsh
         run: |
-          $exe = Get-ChildItem -Path publish -Filter *.exe | Select-Object -First 1
-          if (-not $exe) { throw "No exe found in publish folder." }
-          Copy-Item $exe.FullName "SoundHalo-win-x64.exe" -Force
+          if (!(Test-Path "publish/AirPodsPopup.exe")) { throw "publish/AirPodsPopup.exe not found." }
+          Copy-Item "publish/AirPodsPopup.exe" "SoundHalo-win-x64.exe" -Force
 
       - name: Upload build artifact (Actions page)
         uses: actions/upload-artifact@v4
