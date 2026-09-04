@@ -43,8 +43,8 @@ jobs:
       - name: Prepare release exe
         shell: pwsh
         run: |
-          if (!(Test-Path "publish/AirPodsPopup.exe")) { throw "publish/AirPodsPopup.exe not found." }
-          Copy-Item "publish/AirPodsPopup.exe" "SoundHalo-win-x64.exe" -Force
+          if (!(Test-Path "publish/BluetoothPopup.exe")) { throw "publish/BluetoothPopup.exe not found." }
+          Copy-Item "publish/BluetoothPopup.exe" "SoundHalo-win-x64.exe" -Force
 
       - name: Upload build artifact (Actions page)
         uses: actions/upload-artifact@v4
