@@ -1,0 +1,59 @@
+name: Build and Release WPF EXE
+
+on:
+  push:
+    tags:
+      - "v*"   # 例如 v1.0.0
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Publish (single-file exe)
+        run: >
+          dotnet publish
+          SoundHalo.csproj
+          -c Release
+          -f net8.0-windows
+          -r win-x64
+          --self-contained false
+          /p:PublishSingleFile=true
+          /p:ReadyToRun=true
+          /p:DebugType=None
+          /p:DebugSymbols=false
+          -o publish
+
+      - name: Rename exe for release asset
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path publish -Filter *.exe | Select-Object -First 1
+          if (-not $exe) { throw "No exe found in publish folder." }
+          Copy-Item $exe.FullName "SoundHalo-win-x64.exe" -Force
+
+      - name: Upload build artifact (Actions page)
+        uses: actions/upload-artifact@v4
+        with:
+          name: SoundHalo-win-x64-exe
+          path: SoundHalo-win-x64.exe
+
+      - name: Create/Update GitHub Release and upload exe
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: SoundHalo-win-x64.exe
