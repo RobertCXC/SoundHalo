@@ -31,6 +31,7 @@ public partial class BluetoothPopupWindow : Window
 
     private readonly string _deviceName;
     private readonly TranslateTransform _translateTransform = new();
+    private readonly ScaleTransform _scaleTransform = new(1d, 1d);
     private bool _positionInitialized;
     private IntPtr _windowHandle;
 
@@ -39,7 +40,12 @@ public partial class BluetoothPopupWindow : Window
         InitializeComponent();
         _deviceName = string.IsNullOrWhiteSpace(deviceName) ? "Bluetooth 音频设备" : deviceName;
         DeviceNameText.Text = _deviceName;
-        PopupSurface.RenderTransform = _translateTransform;
+
+        // ScaleTransform first so exit can gently shrink the capsule while it drifts/fades away.
+        var surfaceTransform = new TransformGroup();
+        surfaceTransform.Children.Add(_scaleTransform);
+        surfaceTransform.Children.Add(_translateTransform);
+        PopupSurface.RenderTransform = surfaceTransform;
     }
 
     public PopupState State { get; private set; }
@@ -70,7 +76,7 @@ public partial class BluetoothPopupWindow : Window
             Top,
             GetWorkAreaTop() + 18d - ((PopupHeight - CircleSize) / 2d),
             EnterDuration,
-            new CubicEase { EasingMode = EasingMode.EaseOut },
+            CreateSettleEase(),
             cancellationToken);
 
         State = PopupState.CirclePause;
@@ -86,7 +92,7 @@ public partial class BluetoothPopupWindow : Window
                 PopupSurface.Width,
                 PopupWidth,
                 ExpandDuration,
-                new CubicEase { EasingMode = EasingMode.EaseOut },
+                CreateExpandEase(),
                 cancellationToken),
             AnimateDoubleAsync(
                 this,
@@ -95,7 +101,7 @@ public partial class BluetoothPopupWindow : Window
                 PopupSurface.Height,
                 PopupHeight,
                 ExpandDuration,
-                new CubicEase { EasingMode = EasingMode.EaseOut },
+                CreateExpandEase(),
                 cancellationToken),
             AnimateCornerRadiusAsync(
                 this,
@@ -103,7 +109,7 @@ public partial class BluetoothPopupWindow : Window
                 new CornerRadius(24),
                 new CornerRadius(22),
                 ExpandDuration,
-                new CubicEase { EasingMode = EasingMode.EaseOut },
+                CreateExpandEase(),
                 cancellationToken),
             AnimateDoubleAsync(
                 this,
@@ -168,6 +174,25 @@ public partial class BluetoothPopupWindow : Window
                 -8,
                 ExitDuration,
                 new CubicEase { EasingMode = EasingMode.EaseIn },
+                cancellationToken),
+            // A gentle shrink alongside the fade/drift reads as a soft dissolve rather than an abrupt cut.
+            AnimateDoubleAsync(
+                this,
+                _scaleTransform,
+                ScaleTransform.ScaleXProperty,
+                1,
+                0.94,
+                ExitDuration,
+                new CubicEase { EasingMode = EasingMode.EaseIn },
+                cancellationToken),
+            AnimateDoubleAsync(
+                this,
+                _scaleTransform,
+                ScaleTransform.ScaleYProperty,
+                1,
+                0.94,
+                ExitDuration,
+                new CubicEase { EasingMode = EasingMode.EaseIn },
                 cancellationToken));
 
         Close();
@@ -192,6 +217,16 @@ public partial class BluetoothPopupWindow : Window
     {
         return SystemParameters.WorkArea.Top;
     }
+
+    // A tiny overshoot on the drop-in gives the settle a touch of natural physicality
+    // instead of a hard linear stop.
+    private static IEasingFunction CreateSettleEase() =>
+        new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.15 };
+
+    // Same idea for the circle-to-capsule expansion: a soft "pop" feels less mechanical
+    // than a flat ease-out while still settling precisely on the target size.
+    private static IEasingFunction CreateExpandEase() =>
+        new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.25 };
 
     private static Task AnimateDoubleAsync(
         FrameworkElement containingObject,

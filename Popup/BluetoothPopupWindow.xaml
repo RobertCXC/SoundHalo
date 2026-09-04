@@ -39,7 +39,8 @@
                  VerticalAlignment="Center"
                  Fill="{StaticResource GlassSurfaceBrush}"
                  Stroke="#4AFFFFFF"
-                 StrokeThickness="1" />
+                 StrokeThickness="1"
+                 CacheMode="BitmapCache" />
 
         <TextBlock x:Name="CircleIcon"
                    Text="🎧"
@@ -63,6 +64,7 @@
                 CornerRadius="24"
                 Opacity="0"
                 SnapsToDevicePixels="True"
+                CacheMode="BitmapCache"
                 RenderTransformOrigin="0.5,0.5">
             <Border.RenderTransform>
                 <TranslateTransform />
@@ -131,7 +133,8 @@
                                      Margin="0,0,6,0"
                                      VerticalAlignment="Center"
                                      Fill="#61D995"
-                                     Effect="{StaticResource StatusGlow}" />
+                                     Effect="{StaticResource StatusGlow}"
+                                     CacheMode="BitmapCache" />
                             <TextBlock Text="已连接"
                                        FontSize="12"
                                        Foreground="#D3E5EC" />
@@ -144,7 +147,8 @@
                              HorizontalAlignment="Right"
                              VerticalAlignment="Center"
                              Fill="#61D995"
-                             Effect="{StaticResource StatusGlow}" />
+                             Effect="{StaticResource StatusGlow}"
+                             CacheMode="BitmapCache" />
                 </Grid>
             </Grid>
         </Border>
