@@ -59,13 +59,23 @@ public partial class App : WpfApplication
 
     private void DisposeServices()
     {
-        _bluetoothMonitor?.Dispose();
-        _bluetoothMonitor = null;
-
-        _trayService?.Dispose();
-        _trayService = null;
+        if (_bluetoothMonitor is not null)
+        {
+            _bluetoothMonitor.DeviceConnected -= OnBluetoothDeviceConnected;
+            _bluetoothMonitor.Stop();
+            _bluetoothMonitor.Dispose();
+            _bluetoothMonitor = null;
+        }
 
         _popupService?.Dispose();
         _popupService = null;
+
+        if (_trayService is not null)
+        {
+            _trayService.TestPopupRequested -= OnTestPopupRequested;
+            _trayService.ExitRequested -= OnExitRequested;
+            _trayService.Dispose();
+            _trayService = null;
+        }
     }
 }
