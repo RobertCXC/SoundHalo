@@ -26,6 +26,23 @@ jobs:
       - name: Restore
         run: dotnet restore AirPodsPopup.csproj
 
+      - name: Resolve version
+        shell: pwsh
+        run: |
+          $version = "1.0.0"
+          if ("${{ github.ref }}".StartsWith("refs/tags/")) {
+            $tag = "${{ github.ref_name }}"
+            if ($tag -match "^[vV](.+)$") {
+              $version = $Matches[1]
+            } else {
+              throw "Tag '$tag' must start with v or V."
+            }
+          }
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            throw "Resolved version is empty."
+          }
+          "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Publish (single-file exe)
         run: >
           dotnet publish
@@ -38,6 +55,7 @@ jobs:
           /p:ReadyToRun=true
           /p:DebugType=None
           /p:DebugSymbols=false
+          /p:Version=${{ env.APP_VERSION }}
           -o publish
 
       - name: Prepare release exe
