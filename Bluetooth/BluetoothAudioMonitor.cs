@@ -136,7 +136,8 @@ public sealed class BluetoothAudioMonitor : IDisposable
                         {
                             _ = enumerator.UnregisterEndpointNotificationCallback(notificationClient);
                         }
-                        catch (Exception exception) when (exception is COMException or InvalidOperationException)
+                        catch (Exception exception) when (
+                            exception is COMException or InvalidComObjectException or InvalidOperationException)
                         {
                             Debug.WriteLine($"Core Audio endpoint notification cleanup failed: {exception.Message}");
                         }
@@ -146,7 +147,8 @@ public sealed class BluetoothAudioMonitor : IDisposable
                 }
             }
         }
-        catch (Exception exception) when (exception is COMException or UnauthorizedAccessException or InvalidOperationException or InvalidCastException)
+        catch (Exception exception) when (
+            exception is COMException or InvalidComObjectException or UnauthorizedAccessException or InvalidOperationException or InvalidCastException)
         {
             Debug.WriteLine($"Core Audio endpoint notification registration failed: {exception.Message}");
             Stop();
@@ -195,7 +197,8 @@ public sealed class BluetoothAudioMonitor : IDisposable
                 var result = enumerator.UnregisterEndpointNotificationCallback(notificationClient);
                 ThrowIfFailed(result, "UnregisterEndpointNotificationCallback");
             }
-            catch (Exception exception) when (exception is COMException or InvalidOperationException)
+            catch (Exception exception) when (
+                exception is COMException or InvalidComObjectException or InvalidOperationException)
             {
                 Debug.WriteLine($"Core Audio endpoint notification unregistration failed: {exception.Message}");
             }
@@ -447,7 +450,16 @@ public sealed class BluetoothAudioMonitor : IDisposable
     {
         if (value is not null && Marshal.IsComObject(value))
         {
-            Marshal.FinalReleaseComObject(value);
+            try
+            {
+                // Release only the reference acquired here. FinalReleaseComObject could
+                // invalidate an RCW that another Core Audio operation is still using.
+                _ = Marshal.ReleaseComObject(value);
+            }
+            catch (InvalidComObjectException exception)
+            {
+                Debug.WriteLine($"Core Audio COM object was already disconnected: {exception.Message}");
+            }
         }
     }
 
