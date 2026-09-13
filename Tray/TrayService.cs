@@ -21,6 +21,11 @@ public sealed class TrayService : IDisposable
         var testPopupItem = new Forms.ToolStripMenuItem("测试弹窗");
         testPopupItem.Click += (_, _) => TestPopupRequested?.Invoke(this, EventArgs.Empty);
 
+        var versionItem = new Forms.ToolStripMenuItem($"版本 {VersionInfo.Version}")
+        {
+            Enabled = false
+        };
+
         _startupItem = new Forms.ToolStripMenuItem("开机自启")
         {
             CheckOnClick = false
@@ -31,6 +36,7 @@ public sealed class TrayService : IDisposable
         exitItem.Click += (_, _) => ExitRequested?.Invoke(this, EventArgs.Empty);
 
         _contextMenu.Items.Add(testPopupItem);
+        _contextMenu.Items.Add(versionItem);
         _contextMenu.Items.Add(new Forms.ToolStripSeparator());
         _contextMenu.Items.Add(_startupItem);
         _contextMenu.Items.Add(new Forms.ToolStripSeparator());
