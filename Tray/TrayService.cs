@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using BluetoothPopup.Native;
+using BluetoothPopup.Settings;
 using BluetoothPopup.Startup;
 using Forms = System.Windows.Forms;
 
@@ -10,12 +11,16 @@ public sealed class TrayService : IDisposable
 {
     private readonly Forms.NotifyIcon _notifyIcon;
     private readonly Forms.ContextMenuStrip _contextMenu;
+    private readonly Forms.ToolStripMenuItem _bluetoothMonitoringItem;
+    private readonly Forms.ToolStripMenuItem _comMonitoringItem;
     private readonly Forms.ToolStripMenuItem _startupItem;
     private readonly Icon _trayIcon;
     private bool _disposed;
 
-    public TrayService()
+    public TrayService(AppSettings settings)
     {
+        ArgumentNullException.ThrowIfNull(settings);
+
         _contextMenu = new Forms.ContextMenuStrip();
 
         var testPopupItem = new Forms.ToolStripMenuItem("测试弹窗");
@@ -32,12 +37,28 @@ public sealed class TrayService : IDisposable
         };
         _startupItem.Click += OnStartupItemClick;
 
+        _bluetoothMonitoringItem = new Forms.ToolStripMenuItem("监听蓝牙")
+        {
+            CheckOnClick = false,
+            Checked = settings.EnableBluetoothMonitoring
+        };
+        _bluetoothMonitoringItem.Click += OnBluetoothMonitoringItemClick;
+
+        _comMonitoringItem = new Forms.ToolStripMenuItem("监听 COM")
+        {
+            CheckOnClick = false,
+            Checked = settings.EnableComMonitoring
+        };
+        _comMonitoringItem.Click += OnComMonitoringItemClick;
+
         var exitItem = new Forms.ToolStripMenuItem("退出");
         exitItem.Click += (_, _) => ExitRequested?.Invoke(this, EventArgs.Empty);
 
         _contextMenu.Items.Add(testPopupItem);
         _contextMenu.Items.Add(versionItem);
         _contextMenu.Items.Add(new Forms.ToolStripSeparator());
+        _contextMenu.Items.Add(_bluetoothMonitoringItem);
+        _contextMenu.Items.Add(_comMonitoringItem);
         _contextMenu.Items.Add(_startupItem);
         _contextMenu.Items.Add(new Forms.ToolStripSeparator());
         _contextMenu.Items.Add(exitItem);
@@ -58,6 +79,17 @@ public sealed class TrayService : IDisposable
 
     public event EventHandler? ExitRequested;
 
+    public event EventHandler<MonitoringToggleRequestedEventArgs>? BluetoothMonitoringToggleRequested;
+
+    public event EventHandler<MonitoringToggleRequestedEventArgs>? ComMonitoringToggleRequested;
+
+    public void SetMonitoringState(AppSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        _bluetoothMonitoringItem.Checked = settings.EnableBluetoothMonitoring;
+        _comMonitoringItem.Checked = settings.EnableComMonitoring;
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -68,6 +100,8 @@ public sealed class TrayService : IDisposable
         _disposed = true;
         _notifyIcon.DoubleClick -= OnNotifyIconDoubleClick;
         _contextMenu.Opening -= OnContextMenuOpening;
+        _bluetoothMonitoringItem.Click -= OnBluetoothMonitoringItemClick;
+        _comMonitoringItem.Click -= OnComMonitoringItemClick;
         _startupItem.Click -= OnStartupItemClick;
         _notifyIcon.Visible = false;
         _notifyIcon.Dispose();
@@ -78,6 +112,20 @@ public sealed class TrayService : IDisposable
     private void OnNotifyIconDoubleClick(object? sender, EventArgs e)
     {
         TestPopupRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnBluetoothMonitoringItemClick(object? sender, EventArgs e)
+    {
+        BluetoothMonitoringToggleRequested?.Invoke(
+            this,
+            new MonitoringToggleRequestedEventArgs(!_bluetoothMonitoringItem.Checked));
+    }
+
+    private void OnComMonitoringItemClick(object? sender, EventArgs e)
+    {
+        ComMonitoringToggleRequested?.Invoke(
+            this,
+            new MonitoringToggleRequestedEventArgs(!_comMonitoringItem.Checked));
     }
 
     private void OnContextMenuOpening(object? sender, System.ComponentModel.CancelEventArgs e)
@@ -148,4 +196,15 @@ public sealed class TrayService : IDisposable
             NativeMethods.DestroyIcon(iconHandle);
         }
     }
+
+}
+
+public sealed class MonitoringToggleRequestedEventArgs : EventArgs
+{
+    public MonitoringToggleRequestedEventArgs(bool isEnabled)
+    {
+        IsEnabled = isEnabled;
+    }
+
+    public bool IsEnabled { get; }
 }
